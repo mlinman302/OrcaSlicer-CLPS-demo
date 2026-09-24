@@ -348,6 +348,11 @@ static t_config_enum_values s_keys_map_SlicingMode {
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(SlicingMode)
 
+static t_config_enum_values s_keys_map_SlicingEngineType {
+    { "classic",        int(SlicingEngineType::Classic) }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(SlicingEngineType)
+
 static t_config_enum_values s_keys_map_SupportMaterialPattern {
     { "rectilinear",        smpRectilinear },
     { "rectilinear-grid",   smpRectilinearGrid },
@@ -1999,6 +2004,17 @@ void PrintConfigDef::init_fff_params()
     def = this->add("print_compatible_printers", coStrings);
     def->set_default_value(new ConfigOptionStrings());
     def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("slicing_engine", coEnum);
+    def->label = L("Slicing engine");
+    def->category = L("Others");
+    def->tooltip = L("The engine that turns the models into G-code. \"Classic\" is the standard OrcaSlicer slicing pipeline.");
+    def->enum_keys_map = &ConfigOptionEnum<SlicingEngineType>::get_enum_values();
+    def->enum_values.push_back("classic");
+    def->enum_labels.push_back(L("Classic"));
+    // Develop mode only until a second engine exists.
+    def->mode = comDevelop;
+    def->set_default_value(new ConfigOptionEnum<SlicingEngineType>(SlicingEngineType::Classic));
 
     def = this->add("print_sequence", coEnum);
     def->label = L("Print sequence");
