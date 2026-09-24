@@ -6,6 +6,7 @@
 #include "Config.hpp"
 #include "Exception.hpp"
 #include "Print.hpp"
+#include "SlicingEngine.hpp"
 #include "BoundingBox.hpp"
 #include "Brim.hpp"
 #include "ClipperUtils.hpp"
@@ -77,6 +78,10 @@ struct FilamentType {
     std::string temp_type;
 };
 
+Print::Print() = default;
+
+Print::~Print() { this->clear(); }
+
 void Print::clear()
 {
 	std::scoped_lock<std::mutex> lock(this->state_mutex());
@@ -88,6 +93,46 @@ void Print::clear()
     m_print_regions.clear();
     m_model.clear_objects();
     m_statistics_by_extruder_count.clear();
+    m_engine.reset();
+}
+
+SlicingEngine& Print::engine()
+{
+    // Normally created by apply(); a Print processed without apply() gets the configured engine here.
+    if (!m_engine) {
+        m_engine_type = m_config.slicing_engine.value;
+        m_engine      = make_slicing_engine(m_engine_type);
+    }
+    return *m_engine;
+}
+
+// Slicing process, running at a background thread.
+void Print::process(long long *time_cost_with_cache, bool use_cache)
+{
+    this->engine().process(*this, time_cost_with_cache, use_cache);
+}
+
+// G-code export process, running at a background thread.
+// The export_gcode may die for various reasons (fails to process filename_format,
+// write error into the G-code, cannot execute post-processing scripts).
+// It is up to the caller to show an error message.
+std::string Print::export_gcode(const std::string& path_template, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb)
+{
+    // output everything to a G-code file
+    // The following call may die if the filename_format template substitution fails.
+    std::string path = this->output_filepath(path_template);
+    std::string message;
+    if (!path.empty() && result == nullptr) {
+        // Only show the path if preview_data is not set -> running from command line.
+        message = L("Exporting G-code");
+        message += " to ";
+        message += path;
+    } else
+        message = L("Generating G-code");
+    this->set_status(80, message);
+
+    this->engine().export_gcode(*this, path, result, thumbnail_cb);
+    return path;
 }
 
 bool Print::has_tpu_filament() const
@@ -2678,8 +2723,8 @@ std::map<ObjectID, unsigned int> getObjectExtruderMap(const Print& print) {
     return objectExtruderMap;
 }
 
-// Slicing process, running at a background thread.
-void Print::process(long long *time_cost_with_cache, bool use_cache)
+// Classic slicing process, running at a background thread.
+void Print::process_classic(long long *time_cost_with_cache, bool use_cache)
 {
     long long start_time = 0, end_time = 0;
     if (time_cost_with_cache)
@@ -3317,25 +3362,9 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
     BOOST_LOG_TRIVIAL(info) << "Slicing process finished." << log_memory_info();
 }
 
-// G-code export process, running at a background thread.
-// The export_gcode may die for various reasons (fails to process filename_format,
-// write error into the G-code, cannot execute post-processing scripts).
-// It is up to the caller to show an error message.
-std::string Print::export_gcode(const std::string& path_template, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb)
+// Classic G-code export, running at a background thread.
+void Print::export_gcode_classic(const std::string& path, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb)
 {
-    // output everything to a G-code file
-    // The following call may die if the filename_format template substitution fails.
-    std::string path = this->output_filepath(path_template);
-    std::string message;
-    if (!path.empty() && result == nullptr) {
-        // Only show the path if preview_data is not set -> running from command line.
-        message = L("Exporting G-code");
-        message += " to ";
-        message += path;
-    } else
-        message = L("Generating G-code");
-    this->set_status(80, message);
-
     // The following line may die for multiple reasons.
     GCode gcode;
     //BBS: compute plate offset for gcode-generator
@@ -3352,7 +3381,6 @@ std::string Print::export_gcode(const std::string& path_template, GCodeProcessor
         // generation and read by no emitter, so it does not affect the emitted g-code.
         result->nozzle_group_result = this->get_layered_nozzle_group_result();
     }
-    return path.c_str();
 }
 
 void Print::_make_skirt()

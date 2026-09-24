@@ -35,6 +35,7 @@ class Layer;
 class ModelObject;
 class Print;
 class PrintObject;
+class SlicingEngine;
 class SupportLayer;
 // BBS
 class TreeSupportData;
@@ -495,6 +496,8 @@ public:
   private:
     // to be called from Print only.
     friend class Print;
+    // Step-state access for engines (SlicingEngine::set_started/set_done).
+    friend class SlicingEngine;
 
 	PrintObject(Print* print, ModelObject* model_object, const Transform3d& trafo, PrintInstances&& instances);
 	~PrintObject();
@@ -925,8 +928,8 @@ public:
     // layer registers a dispatcher; libslic3r stays free of any plugin/Python dependency.
     static void set_slicing_pipeline_hook_fn(SlicingPipelineHookFn fn) { s_slicing_pipeline_hook_fn = std::move(fn); }
 
-    Print() = default;
-	virtual ~Print() { this->clear(); }
+    Print();
+	virtual ~Print();
 
 	PrinterTechnology	technology() const noexcept override { return ptFFF; }
 
@@ -942,10 +945,14 @@ public:
 
     ApplyStatus         apply(const Model &model, DynamicPrintConfig config, bool extruder_applied = false) override;
 
+    // Runs the engine selected by slicing_engine.
     void                process(long long *time_cost_with_cache = nullptr, bool use_cache = false) override;
     // Exports G-code into a file name based on the path_template, returns the file path of the generated G-code file.
     // If preview_data is not null, the preview_data is filled in for the G-code visualization (not used by the command line Slic3r).
+    // Runs the engine selected by slicing_engine.
     std::string         export_gcode(const std::string& path_template, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb = nullptr);
+    // The engine process() and export_gcode() dispatch to. Replaced by apply() when slicing_engine changes.
+    SlicingEngine&      engine();
     //return 0 means successful
     int                 export_cached_data(const std::string& dir_path, bool with_space=false) override;
     int                 load_cached_data(const std::string& directory) override;
@@ -1302,6 +1309,14 @@ private:
     // Islands of objects and their supports extruded at the 1st layer.
     Polygons            first_layer_islands() const;
 
+    // The Classic engine's bodies, reached through ClassicSlicingEngine.
+    void                process_classic(long long *time_cost_with_cache, bool use_cache);
+    void                export_gcode_classic(const std::string &path, GCodeProcessorResult *result, ThumbnailsGeneratorCallback thumbnail_cb);
+
+    std::unique_ptr<SlicingEngine>          m_engine;
+    // Type requested by the config; m_engine may be the Classic fallback when it is not registered.
+    SlicingEngineType                       m_engine_type { SlicingEngineType::Classic };
+
     static SlicingPipelineHookFn s_slicing_pipeline_hook_fn;
     bool m_pipeline_plugin_active { false };
     void run_pipeline_hook(SlicingPipelineStepPlugin step, const PrintObject* object) {
@@ -1390,6 +1405,9 @@ private:
     friend class GCode;
     // Allow PrintObject to access m_mutex and m_cancel_callback.
     friend class PrintObject;
+    // Step-state and cancel access for engines, and the Classic bodies for its wrapper.
+    friend class SlicingEngine;
+    friend class ClassicSlicingEngine;
 
 public:
     //BBS: this was a print config and now seems to be useless so we move it to here
