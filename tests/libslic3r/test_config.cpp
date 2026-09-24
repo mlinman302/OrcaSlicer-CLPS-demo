@@ -675,6 +675,36 @@ TEST_CASE("H2C/A2L-era multi-nozzle and pre-heat config keys exist", "[config]")
     REQUIRE(config.option<ConfigOptionFloatsNullable>("filament_ramming_volumetric_speed")->values == std::vector<double>{-1});
 }
 
+TEST_CASE("slicing_engine defaults to classic and round-trips through a string map", "[Config]") {
+    DynamicPrintConfig original = DynamicPrintConfig::full_print_config();
+    const auto *engine = original.option<ConfigOptionEnum<SlicingEngineType>>("slicing_engine");
+    REQUIRE(engine != nullptr);
+    CHECK(engine->value == SlicingEngineType::Classic);
+    CHECK(engine->serialize() == "classic");
+
+    std::map<std::string, std::string> serialized{{"slicing_engine", engine->serialize()}};
+    DynamicPrintConfig reloaded = DynamicPrintConfig::full_print_config();
+    reloaded.load_string_map(serialized, ForwardCompatibilitySubstitutionRule::Disable);
+    CHECK(reloaded.opt_enum<SlicingEngineType>("slicing_engine") == SlicingEngineType::Classic);
+}
+
+TEST_CASE("slicing_engine is independent of the per-object slicing_mode", "[Config]") {
+    // slicing_mode is the mesh slicer's polygon fill rule; the two keys must not alias.
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    config.set_deserialize_strict("slicing_mode", "even_odd");
+    CHECK(config.opt_enum<SlicingEngineType>("slicing_engine") == SlicingEngineType::Classic);
+    CHECK(config.opt_enum<SlicingMode>("slicing_mode") == SlicingMode::EvenOdd);
+}
+
+TEST_CASE("An unknown slicing_engine from a newer project falls back to classic", "[Config]") {
+    // An older build opening a project saved with an engine it does not know must slice Classic.
+    std::map<std::string, std::string> newer{{"slicing_engine", "some_future_engine"}};
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    const ConfigSubstitutions substitutions = config.load_string_map(newer, ForwardCompatibilitySubstitutionRule::Enable);
+    CHECK(substitutions.size() == 1);
+    CHECK(config.opt_enum<SlicingEngineType>("slicing_engine") == SlicingEngineType::Classic);
+}
+
 SCENARIO("ConfigOptionVector::set_to_index with stride=1 copies values correctly", "[Config][set_to_index]") {
     GIVEN("A destination vector and a source vector with 3 values") {
         Slic3r::ConfigOptionFloats dest({0.0});

@@ -7102,6 +7102,10 @@ void GCode::append_full_config(const Print &print, std::string &str)
     // built from still carries the registered default. Copy the real values so the header line is
     // diagnostic (nothing parses it back).
     cfg.option<ConfigOptionInts>("filament_map_2", true)->values = print.config().filament_map_2.values;
+    // Classic, the default engine, leaves no line in the dump so its G-code stays byte-identical to builds
+    // without the key; any other engine is recorded.
+    if (print.config().slicing_engine.value == SlicingEngineType::Classic)
+        cfg.erase("slicing_engine");
     // Sorted list of config keys, which shall not be stored into the G-code. Initializer list.
     static const std::set<std::string_view> banned_keys( {
         // filament_extruder_compatibility is a device-side (blacklist) compatibility hint read from the

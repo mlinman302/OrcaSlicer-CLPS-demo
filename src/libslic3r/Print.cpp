@@ -439,6 +439,9 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         }
         else if (opt_key == "z_hop_types") {
             osteps.emplace_back(posDetectOverhangsForLift);
+        } else if (opt_key == "slicing_engine") {
+            // A different engine produces everything from scratch.
+            invalidated |= this->invalidate_all_steps();
         } else {
             // for legacy, if we can't handle this option let's invalidate all steps
             //FIXME invalidate all steps of all objects as well?

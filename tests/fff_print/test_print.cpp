@@ -349,6 +349,31 @@ TEST_CASE("Print::validate tolerates a null warnings pointer", "[Print][validate
     CHECK(err.string.empty());
 }
 
+TEST_CASE("The slicing engine is Classic and re-applying it keeps the slice valid", "[Print]")
+{
+    Print print;
+    Model model;
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    // init_print turns G-code comments on; match it so the re-apply below diffs nothing.
+    config.set_deserialize_strict({{"slicing_engine", "classic"}, {"gcode_comments", "1"}});
+    init_print({ cube(20) }, print, model, config);
+    print.process();
+    CHECK(print.config().slicing_engine.value == SlicingEngineType::Classic);
+    REQUIRE(print.is_step_done(psSlicingFinished));
+
+    // Same engine again: nothing to redo.
+    CHECK(print.apply(model, config) != PrintBase::APPLY_STATUS_INVALIDATED);
+    CHECK(print.is_step_done(psSlicingFinished));
+}
+
+TEST_CASE("Classic G-code does not record the slicing engine in its config block", "[Print]")
+{
+    // Keeps Classic output identical to builds that predate the option.
+    const std::string gcode = Slic3r::Test::slice({ cube(20) }, {{"slicing_engine", "classic"}});
+    REQUIRE(gcode.find("; layer_height = ") != std::string::npos);
+    CHECK(gcode.find("; slicing_engine = ") == std::string::npos);
+}
+
 TEST_CASE("A default slice emits perimeter, infill, and skirt", "[Print]")
 {
     const std::string gcode = slice({ cube(20) }, {
