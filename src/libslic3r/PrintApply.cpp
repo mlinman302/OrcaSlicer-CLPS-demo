@@ -1,6 +1,7 @@
 #include "ClipperUtils.hpp"
 #include "Model.hpp"
 #include "Print.hpp"
+#include "SlicingEngine.hpp"
 #include "FilamentMixer.hpp"
 
 #include <boost/log/trivial.hpp>
@@ -2044,6 +2045,13 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
 #ifdef _DEBUG
     check_model_ids_equal(m_model, model);
 #endif /* _DEBUG */
+
+    // A changed slicing_engine invalidated every step above, which stops the background worker,
+    // so the old engine is no longer in use when it is replaced here.
+    if (!m_engine || m_engine_type != m_config.slicing_engine.value) {
+        m_engine_type = m_config.slicing_engine.value;
+        m_engine      = make_slicing_engine(m_engine_type);
+    }
 
 	//BBS: add timestamp logic
 	if (apply_status != APPLY_STATUS_UNCHANGED)
