@@ -25,6 +25,9 @@ public:
     virtual SlicingEngineType type() const = 0;
     virtual SlicingEngineCaps caps() const = 0;
 
+    // UI thread. Engine-specific refusals, checked by Print::validate() before Classic's own checks.
+    virtual StringObjectException validate(const Print &/*print*/, std::vector<StringObjectException> */*warnings*/) const { return {}; }
+
     // Worker thread. Must reach psSlicingFinished; must call throw_if_canceled() often.
     virtual void process(Print &print, long long *time_cost_with_cache, bool use_cache) = 0;
 

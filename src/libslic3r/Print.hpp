@@ -36,6 +36,7 @@ class ModelObject;
 class Print;
 class PrintObject;
 class SlicingEngine;
+struct SlicingEngineCaps;
 class SupportLayer;
 // BBS
 class TreeSupportData;
@@ -926,6 +927,7 @@ public:
     using SlicingPipelineHookFn = std::function<void(Print&, const PrintObject*, SlicingPipelineStepPlugin)>;
     // Cross-layer injection (mirrors ConfigBase::set_resolve_capability_fn): the GUI/plugin
     // layer registers a dispatcher; libslic3r stays free of any plugin/Python dependency.
+    // Only the Classic engine fires the hooks (SlicingEngineCaps::pipeline_hooks).
     static void set_slicing_pipeline_hook_fn(SlicingPipelineHookFn fn) { s_slicing_pipeline_hook_fn = std::move(fn); }
 
     Print();
@@ -953,6 +955,9 @@ public:
     std::string         export_gcode(const std::string& path_template, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb = nullptr);
     // The engine process() and export_gcode() dispatch to. Replaced by apply() when slicing_engine changes.
     SlicingEngine&      engine();
+    // What the current engine leaves behind (layers, tool ordering, ...); Classic's until apply() makes an engine.
+    // Consumers of intermediate slicing data check this instead of assuming Classic ran.
+    SlicingEngineCaps   engine_caps() const;
     //return 0 means successful
     int                 export_cached_data(const std::string& dir_path, bool with_space=false) override;
     int                 load_cached_data(const std::string& directory) override;

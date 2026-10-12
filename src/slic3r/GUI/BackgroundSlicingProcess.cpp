@@ -19,6 +19,7 @@
 // Print now includes tbb, and tbb includes Windows. This breaks compilation of wxWidgets if included before wx.
 #include "libslic3r/Print.hpp"
 #include "libslic3r/SLAPrint.hpp"
+#include "libslic3r/SlicingEngine.hpp"
 #include "libslic3r/Utils.hpp"
 #include "PostProcessor.hpp"
 #include "libslic3r/Format/SL1.hpp"
@@ -230,7 +231,9 @@ void BackgroundSlicingProcess::process_fff()
         m_print->process();
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__
                                 << boost::format(" %1%: after print::process, send slicing complete event to gui...") % __LINE__;
-        if (m_current_plate->get_real_filament_map_mode(preset_bundle.project_config) < FilamentMapMode::fmmManual) {
+        // The filament maps are a result of tool ordering; an engine without it leaves the plate's maps alone.
+        const bool has_tool_ordering = m_fff_print->engine_caps().tool_ordering;
+        if (has_tool_ordering && m_current_plate->get_real_filament_map_mode(preset_bundle.project_config) < FilamentMapMode::fmmManual) {
             std::vector<int> f_maps = m_fff_print->get_filament_maps();
             m_current_plate->set_filament_maps(f_maps);
             // The engine's concrete per-filament volume assignment is merged into the print
@@ -240,7 +243,7 @@ void BackgroundSlicingProcess::process_fff()
             std::vector<int> f_volume_maps = m_fff_print->get_filament_volume_maps();
             m_current_plate->set_filament_volume_maps(f_volume_maps);
         }
-        if (m_current_plate->get_real_filament_map_mode(preset_bundle.project_config) != FilamentMapMode::fmmNozzleManual) {
+        if (has_tool_ordering && m_current_plate->get_real_filament_map_mode(preset_bundle.project_config) != FilamentMapMode::fmmNozzleManual) {
             // The engine-resolved nozzle map is read back for every non-nozzle-manual mode so the
             // plate config the next apply overlays matches the engine's written-back state
             // (otherwise the full-config diff would invalidate the g-code on every apply).
