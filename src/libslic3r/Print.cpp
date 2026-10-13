@@ -96,6 +96,11 @@ void Print::clear()
     m_engine.reset();
 }
 
+SlicingEngineCaps Print::engine_caps() const
+{
+    return m_engine ? m_engine->caps() : ClassicSlicingEngine().caps();
+}
+
 SlicingEngine& Print::engine()
 {
     // Normally created by apply(); a Print processed without apply() gets the configured engine here.
@@ -1772,6 +1777,11 @@ StringObjectException Print::validate(std::vector<StringObjectException> *warnin
 
     if (m_objects.empty())
         return {std::string()};
+
+    // The engine's own refusals come first: they explain why it cannot slice this at all.
+    if (m_engine)
+        if (StringObjectException err = m_engine->validate(*this, warnings); !err.string.empty())
+            return err;
 
     if (extruders.empty())
         return { L("No extrusions under current settings.") };
@@ -4425,6 +4435,9 @@ int Print::get_config_index(int filament_id, int layer_id, const std::vector<std
 // Wipe tower support.
 bool Print::has_wipe_tower() const
 {
+    // The wipe tower comes from tool ordering; an engine without it prints no tower.
+    if (!this->engine_caps().tool_ordering)
+        return false;
     if (m_config.enable_prime_tower.value == true) {
         if (m_config.enable_wrapping_detection.value && m_config.wrapping_exclude_area.values.size() > 2)
             return true;
@@ -5847,6 +5860,10 @@ static void from_json(const json& j, groupedVolumeSlices& firstlayer_group)
 
 int Print::export_cached_data(const std::string& directory, bool with_space)
 {
+    if (!this->engine_caps().cache) {
+        BOOST_LOG_TRIVIAL(info) << "The slicing engine keeps no cached slicing data; nothing exported to " << directory;
+        return 0;
+    }
     int ret = 0;
     boost::filesystem::path directory_path(directory);
 
@@ -6115,6 +6132,9 @@ int Print::export_cached_data(const std::string& directory, bool with_space)
 
 int Print::load_cached_data(const std::string& directory)
 {
+    // The caller slices normally when nothing is found.
+    if (!this->engine_caps().cache)
+        return CLI_IMPORT_CACHE_NOT_FOUND;
     int ret = 0;
     boost::filesystem::path directory_path(directory);
 

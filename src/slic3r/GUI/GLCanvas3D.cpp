@@ -9,6 +9,7 @@
 #include "libslic3r/BuildVolume.hpp"
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/SlicingEngine.hpp"
 #include "libslic3r/GCode/ThumbnailData.hpp"
 #include "libslic3r/Geometry/ConvexHull.hpp"
 #include "libslic3r/ExtrusionEntity.hpp"
@@ -2956,6 +2957,7 @@ void GLCanvas3D::reload_scene(bool refresh_immediately, bool force_full_scene_re
 
                 const Print* current_print = part_plate->fff_print();
                 if (part_plate->get_objects_on_this_plate().empty()) continue;
+                if (current_print != nullptr && !current_print->engine_caps().tool_ordering) continue;
 
                 // Body and brim from this plate's own estimate: m_process->fff_print() is the
                 // selected plate's, so an auto brim drew every tower with that plate's brim.
